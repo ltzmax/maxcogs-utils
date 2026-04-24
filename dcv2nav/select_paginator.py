@@ -25,21 +25,31 @@ SOFTWARE.
 from __future__ import annotations
 
 import contextlib
+from typing import Any
 
 import discord
 
 
 class _SelectPaginatorSelect(discord.ui.Select):
-    """Select menu for SelectPaginator. Holds explicit paginator reference."""
+    """Select menu for any paginator-like view.
+
+    Works with any object that exposes:
+    - ``author`` - the user who invoked the view
+    - ``current`` - current page index (int), set to the selected value
+    - ``_build_content()`` - rebuilds the view
+
+    Holds an explicit reference so it works correctly inside Containers.
+    """
 
     def __init__(
         self,
-        paginator: "SelectPaginator",
+        paginator: Any,
         options: list[discord.SelectOption],
+        placeholder: str = "Choose a page...",
         disabled: bool = False,
     ) -> None:
         super().__init__(
-            placeholder=paginator.placeholder,
+            placeholder=placeholder,
             options=options,
             disabled=disabled,
         )
@@ -125,7 +135,7 @@ class SelectPaginator(discord.ui.LayoutView):
             *content_components,
             discord.ui.Separator(),
             discord.ui.ActionRow(
-                _SelectPaginatorSelect(self, self._options, disabled=disabled)
+                _SelectPaginatorSelect(self, self._options, placeholder=self.placeholder, disabled=disabled)
             ),
         ))
 

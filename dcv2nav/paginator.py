@@ -25,7 +25,7 @@ SOFTWARE.
 from __future__ import annotations
 
 import contextlib
-from typing import Union
+from typing import Any, Union
 
 import discord
 
@@ -35,17 +35,21 @@ PageType = Union[str, list]
 
 
 class _NavBtn(discord.ui.Button):
-    """Navigation button for LayoutViewPaginator.
+    """Navigation button for any paginator-like view.
 
-    Holds an explicit reference to the paginator so it works correctly
-    when placed inside a Container (components inside containers do not
-    have self.view set by discord.py's view dispatch).
+    Works with any object that exposes:
+    - ``author`` - the user who invoked the view
+    - ``current`` - current page index (int)
+    - ``pages`` - list of pages
+    - ``_build_content()`` - rebuilds the view
+
+    Holds an explicit reference so it works correctly inside Containers.
     """
 
     def __init__(
         self,
         direction: str,
-        paginator: "LayoutViewPaginator",
+        paginator: Any,
         disabled: bool = False,
     ) -> None:
         label = "◀" if direction == "prev" else "▶"
