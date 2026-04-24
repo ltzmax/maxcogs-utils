@@ -25,13 +25,20 @@ SOFTWARE.
 from __future__ import annotations
 
 import contextlib
-from typing import Any, Union
+from typing import Any, Optional, Union
 
 import discord
+from red_commons.logging import getLogger
 
+
+log = getLogger("red.dcv2nav.paginator")
 
 # Pages can be either plain text strings or pre-built component lists.
 PageType = Union[str, list]
+
+# Default nav button labels
+_DEFAULT_PREV = "\u25c4"
+_DEFAULT_NEXT = "\u25ba"
 
 
 class _NavBtn(discord.ui.Button):
@@ -44,6 +51,20 @@ class _NavBtn(discord.ui.Button):
     - ``_build_content()`` - rebuilds the view
 
     Holds an explicit reference so it works correctly inside Containers.
+
+    Parameters
+    ----------
+    direction:
+        ``"prev"`` or ``"next"``.
+    paginator:
+        The paginator view that owns this button.
+    disabled:
+        Whether the button is disabled. Defaults to ``False``.
+    emoji:
+        Optional custom emoji instead of the default labels.
+        Accepts a ``str`` (Unicode or ``<:name:id>`` format) or a
+        ``discord.Emoji`` / ``discord.PartialEmoji`` instance.
+        When set, the text label is hidden.
     """
 
     def __init__(
@@ -51,12 +72,14 @@ class _NavBtn(discord.ui.Button):
         direction: str,
         paginator: Any,
         disabled: bool = False,
+        emoji: Optional[Union[str, discord.Emoji, discord.PartialEmoji]] = None,
     ) -> None:
-        label = "◀" if direction == "prev" else "▶"
+        label = None if emoji else (_DEFAULT_PREV if direction == "prev" else _DEFAULT_NEXT)
         super().__init__(
             label=label,
+            emoji=emoji,
             style=discord.ButtonStyle.secondary,
-            disabled=disabled,
+            disabled=bool(disabled),
         )
         self.direction = direction
         self.paginator = paginator
@@ -66,12 +89,17 @@ class _NavBtn(discord.ui.Button):
             return await interaction.response.send_message(
                 "You are not the author of this paginator.", ephemeral=True
             )
-        if self.direction == "prev" and self.paginator.current > 0:
-            self.paginator.current -= 1
-        elif self.direction == "next" and self.paginator.current < len(self.paginator.pages) - 1:
-            self.paginator.current += 1
-        self.paginator._build_content()
-        await interaction.response.edit_message(view=self.paginator)
+        try:
+            if self.direction == "prev" and self.paginator.current > 0:
+                self.paginator.current -= 1
+            elif self.direction == "next" and self.paginator.current < len(self.paginator.pages) - 1:
+                self.paginator.current += 1
+            self.paginator._build_content()
+            await interaction.response.edit_message(view=self.paginator)
+        except discord.HTTPException as e:
+            log.error("Failed to edit paginator message: %s", e)
+        except Exception as e:
+            log.error("Unexpected error in _NavBtn callback: %s", e, exc_info=True)
 
 
 class LayoutViewPaginator(discord.ui.LayoutView):
@@ -102,15 +130,12 @@ class LayoutViewPaginator(discord.ui.LayoutView):
                     discord.ui.Button(style=discord.ButtonStyle.link, label="Read", url="https://...")
                 ),
             ],
-            [
-                discord.ui.TextDisplay("## Article 2\nAnother summary"),
-            ],
         ]
         view = LayoutViewPaginator(pages, ctx)
         view.message = await ctx.send(view=view)
 
-    The ◀ ``current/total`` ▶ nav bar is always rendered. The ◀ and ▶ buttons
-    are disabled automatically at the first and last page.
+    The nav bar is always rendered at the bottom. Prev/next buttons are
+    disabled automatically at the first and last page.
 
     Parameters
     ----------
@@ -121,6 +146,10 @@ class LayoutViewPaginator(discord.ui.LayoutView):
         The command context. Used to restrict nav interactions to the author.
     timeout:
         View timeout in seconds. Defaults to 120. Set to ``None`` for no timeout.
+    prev_emoji:
+        Optional custom emoji for the previous button instead of the default label.
+    next_emoji:
+        Optional custom emoji for the next button instead of the default label.
     """
 
     def __init__(
@@ -128,6 +157,8 @@ class LayoutViewPaginator(discord.ui.LayoutView):
         pages: list[PageType],
         ctx,
         timeout: int | None = 120,
+        prev_emoji: Optional[Union[str, discord.Emoji, discord.PartialEmoji]] = None,
+        next_emoji: Optional[Union[str, discord.Emoji, discord.PartialEmoji]] = None,
     ) -> None:
         super().__init__(timeout=timeout)
         if not pages:
@@ -136,25 +167,26 @@ class LayoutViewPaginator(discord.ui.LayoutView):
         self.current = 0
         self.message = None
         self.author = ctx.author
+        self.prev_emoji = prev_emoji
+        self.next_emoji = next_emoji
         self._build_content()
 
     def _build_content(self, disabled: bool = False) -> None:
         self.clear_items()
 
         page = self.pages[self.current]
-        if isinstance(page, str):
-            content_components: list = [discord.ui.TextDisplay(page)]
-        else:
-            content_components = list(page)
+        content_components: list = (
+            [discord.ui.TextDisplay(page)] if isinstance(page, str) else list(page)
+        )
 
         nav_row = discord.ui.ActionRow(
-            _NavBtn("prev", self, disabled=disabled or self.current == 0),
+            _NavBtn("prev", self, disabled=bool(disabled or self.current == 0), emoji=self.prev_emoji),
             discord.ui.Button(
                 label=f"{self.current + 1}/{len(self.pages)}",
                 style=discord.ButtonStyle.secondary,
                 disabled=True,
             ),
-            _NavBtn("next", self, disabled=disabled or self.current == len(self.pages) - 1),
+            _NavBtn("next", self, disabled=bool(disabled or self.current == len(self.pages) - 1), emoji=self.next_emoji),
         )
 
         self.add_item(discord.ui.Container(
@@ -165,11 +197,10 @@ class LayoutViewPaginator(discord.ui.LayoutView):
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # Individual nav buttons do their own author check before editing.
-        # This base check is kept as a fallback for any other interactions.
         return True
 
     async def on_timeout(self) -> None:
         self._build_content(disabled=True)
         if self.message:
-            with contextlib.suppress(discord.HTTPException):
+            with contextlib.suppress(discord.HTTPException, RuntimeError):
                 await self.message.edit(view=self)
