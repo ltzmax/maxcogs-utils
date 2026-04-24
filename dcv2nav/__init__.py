@@ -8,5 +8,5 @@ from .paginator import LayoutViewPaginator, _NavBtn
 from .select_paginator import SelectPaginator, _SelectPaginatorSelect
 
 __all__ = ["LayoutViewPaginator", "SelectPaginator", "_NavBtn", "_SelectPaginatorSelect"]
-__version__ = "1.2.0"
+__version__ = "1.2.1"
 __author__ = "ltzmax"
