@@ -25,10 +25,17 @@ SOFTWARE.
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import Any, Optional, Union
 
 import discord
-from red_commons.logging import getLogger
+
+try:
+    from red_commons.logging import getLogger
+except ImportError:
+
+    def getLogger(name: str) -> logging.Logger:  # type: ignore[misc]
+        return logging.getLogger(name)
 
 
 log = getLogger("red.dcv2nav.paginator")
@@ -92,7 +99,9 @@ class _NavBtn(discord.ui.Button):
         try:
             if self.direction == "prev" and self.paginator.current > 0:
                 self.paginator.current -= 1
-            elif self.direction == "next" and self.paginator.current < len(self.paginator.pages) - 1:
+            elif (
+                self.direction == "next" and self.paginator.current < len(self.paginator.pages) - 1
+            ):
                 self.paginator.current += 1
             self.paginator._build_content()
             await interaction.response.edit_message(view=self.paginator)
@@ -180,20 +189,32 @@ class LayoutViewPaginator(discord.ui.LayoutView):
         )
 
         nav_row = discord.ui.ActionRow(
-            _NavBtn("prev", self, disabled=bool(disabled or self.current == 0), emoji=self.prev_emoji),
+            _NavBtn(
+                "prev",
+                self,
+                disabled=bool(disabled or self.current == 0),
+                emoji=self.prev_emoji,
+            ),
             discord.ui.Button(
                 label=f"{self.current + 1}/{len(self.pages)}",
                 style=discord.ButtonStyle.secondary,
                 disabled=True,
             ),
-            _NavBtn("next", self, disabled=bool(disabled or self.current == len(self.pages) - 1), emoji=self.next_emoji),
+            _NavBtn(
+                "next",
+                self,
+                disabled=bool(disabled or self.current == len(self.pages) - 1),
+                emoji=self.next_emoji,
+            ),
         )
 
-        self.add_item(discord.ui.Container(
-            *content_components,
-            discord.ui.Separator(),
-            nav_row,
-        ))
+        self.add_item(
+            discord.ui.Container(
+                *content_components,
+                discord.ui.Separator(),
+                nav_row,
+            )
+        )
 
     async def interaction_check(self, interaction: discord.Interaction) -> bool:
         # Individual nav buttons do their own author check before editing.

@@ -25,10 +25,17 @@ SOFTWARE.
 from __future__ import annotations
 
 import contextlib
+import logging
 from typing import Any, Optional, Union
 
 import discord
-from red_commons.logging import getLogger
+
+try:
+    from red_commons.logging import getLogger
+except ImportError:
+
+    def getLogger(name: str) -> logging.Logger:  # type: ignore[misc]
+        return logging.getLogger(name)
 
 
 log = getLogger("red.dcv2nav.select_paginator")
@@ -82,7 +89,11 @@ class _SelectPaginatorSelect(discord.ui.Select):
         except discord.HTTPException as e:
             log.error("Failed to edit select paginator message: %s", e)
         except Exception as e:
-            log.error("Unexpected error in _SelectPaginatorSelect callback: %s", e, exc_info=True)
+            log.error(
+                "Unexpected error in _SelectPaginatorSelect callback: %s",
+                e,
+                exc_info=True,
+            )
 
 
 class SelectPaginator(discord.ui.LayoutView):
@@ -132,7 +143,9 @@ class SelectPaginator(discord.ui.LayoutView):
         ctx,
         placeholder: str = "Choose a page...",
         timeout: int | None = 120,
-        option_emojis: Optional[list[Optional[Union[str, discord.Emoji, discord.PartialEmoji]]]] = None,
+        option_emojis: Optional[
+            list[Optional[Union[str, discord.Emoji, discord.PartialEmoji]]]
+        ] = None,
     ) -> None:
         super().__init__(timeout=timeout)
         if not pages:
@@ -164,15 +177,20 @@ class SelectPaginator(discord.ui.LayoutView):
             [discord.ui.TextDisplay(page)] if isinstance(page, str) else list(page)
         )
 
-        self.add_item(discord.ui.Container(
-            *content_components,
-            discord.ui.Separator(),
-            discord.ui.ActionRow(
-                _SelectPaginatorSelect(
-                    self, self._options, placeholder=self.placeholder, disabled=bool(disabled)
-                )
-            ),
-        ))
+        self.add_item(
+            discord.ui.Container(
+                *content_components,
+                discord.ui.Separator(),
+                discord.ui.ActionRow(
+                    _SelectPaginatorSelect(
+                        self,
+                        self._options,
+                        placeholder=self.placeholder,
+                        disabled=bool(disabled),
+                    )
+                ),
+            )
+        )
 
     async def on_timeout(self) -> None:
         self._build_content(disabled=True)
